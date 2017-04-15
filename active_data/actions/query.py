@@ -131,13 +131,13 @@ def _test_mode_wait(query):
                 "cardinality",
                 "last_updated"
             ],
-            "where": {"eq": {"table": join_field(split_field(query["from"])[0:1])}}
+            "where": {"eq": {"es_index": join_field(split_field(query["from"])[0:1])}}
         })
 
         # BE SURE THEY ARE ON THE todo QUEUE FOR RE-EVALUATION
         cols = [c for c in m.get_columns(table_name=query["from"], force=True) if c.type not in STRUCT]
         for c in cols:
-            Log.note("Mark {{column}} dirty at {{time}}", column=c.name, time=now)
+            Log.note("Mark {{column}} dirty at {{time}}", column=c.names["."], time=now)
             c.last_updated = now - TOO_OLD
             m.todo.push(c)
 
@@ -147,7 +147,7 @@ def _test_mode_wait(query):
             for c in cols:
                 if not c.last_updated or c.cardinality == None :
                     Log.note(
-                        "wait for column (table={{col.table}}, name={{col.name}}) metadata to arrive",
+                        "wait for column (table={{col.es_index}}, name={{col.es_column}}) metadata to arrive",
                         col=c
                     )
                     break

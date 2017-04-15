@@ -21,7 +21,7 @@ from mo_logs.exceptions import Except
 from mo_logs.strings import utf82unicode
 from mo_threads import Lock
 from mo_dots import coalesce, Null, Data, set_default, join_field, split_field, listwrap, literal_field, \
-    ROOT_PATH
+    ROOT_PATH, concat_field
 from mo_dots import wrap
 from mo_dots.lists import FlatList
 from pyLibrary import convert
@@ -108,7 +108,7 @@ class Index(Features):
                 if len(candidate_types) != 1:
                     Log.error("Expecting `type` parameter")
                 self.settings.type = type = candidate_types[0]
-        except Exception, e:
+        except Exception as e:
             # EXPLORING (get_metadata()) IS NOT ALLOWED ON THE PUBLIC CLUSTER
             Log.error("not expected", cause=e)
 
@@ -220,7 +220,7 @@ class Index(Features):
     def flush(self):
         try:
             self.cluster.post("/" + self.settings.index + "/_flush", data={"wait_if_ongoing": True, "forced": False})
-        except Exception, e:
+        except Exception as e:
             if "FlushNotAllowedEngineException" in e:
                 Log.note("Flush is ignored")
             else:
@@ -302,7 +302,7 @@ class Index(Features):
             with Timer("Add {{num}} documents to {{index}}", {"num": len(lines) / 2, "index":self.settings.index}, debug=self.debug):
                 try:
                     data_bytes = b"\n".join(l for l in lines) + b"\n"
-                except Exception, e:
+                except Exception as e:
                     Log.error("can not make request body from\n{{lines|indent}}", lines=lines, cause=e)
 
                 response = self.cluster.post(
@@ -354,7 +354,7 @@ class Index(Features):
                         )
                     Log.error("Problems with insert", cause=cause)
 
-        except Exception, e:
+        except Exception as e:
             if e.message.startswith("sequence item "):
                 Log.error("problem with {{data}}", data=repr(lines[int(e.message[14:16].strip())]), cause=e)
             Log.error("problem sending to ES", e)
@@ -425,7 +425,7 @@ class Index(Features):
                 timeout=coalesce(timeout, self.settings.timeout),
                 retry=retry
             )
-        except Exception, e:
+        except Exception as e:
             Log.error(
                 "Problem with search (path={{path}}):\n{{query|indent}}",
                 path=self.path + "/_search",
@@ -434,6 +434,7 @@ class Index(Features):
             )
 
     def threaded_queue(self, batch_size=None, max_size=None, period=None, silent=False):
+
         def errors(e, _buffer):  # HANDLE ERRORS FROM extend()
             if e.cause.cause:
                 not_possible = [f for f in listwrap(e.cause.cause) if any(h in f for h in HOPELESS)]
@@ -537,8 +538,8 @@ class Cluster(object):
         index = kwargs.index
         meta = self.get_metadata()
         columns = parse_properties(index, ".", meta.indices[index].mappings.values()[0].properties)
-        if len(columns)!=0:
-            kwargs.tjson = tjson or any(c.names[best.index].endswith("$value") for c in columns)
+        if len(columns) != 0:
+            kwargs.tjson = tjson or any(c.names["."].endswith("$value") for c in columns)
 
         return Index(kwargs)
 
@@ -661,7 +662,7 @@ class Cluster(object):
                 if index in state.metadata.indices:
                     break
                 Log.note("Waiting for index {{index}} to appear", index=index)
-            except Exception, e:
+            except Exception as e:
                 Log.warning("Problem while waiting for index {{index}} to appear", index=index, cause=e)
             Till(seconds=1).wait()
         Log.alert("Made new index {{index|quote}}", index=index)
@@ -693,7 +694,7 @@ class Cluster(object):
             if self.debug:
                 Log.note("delete response {{response}}", response=details)
             return response
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with call to {{url}}", url=url, cause=e)
 
     def get_aliases(self):
@@ -701,9 +702,9 @@ class Cluster(object):
         RETURN LIST OF {"alias":a, "index":i} PAIRS
         ALL INDEXES INCLUDED, EVEN IF NO ALIAS {"alias":Null}
         """
-        data = self.get("/_cluster/state", retry={"times": 5}, timeout=3)
+        data = self.get("/_aliases", retry={"times": 5}, timeout=3)
         output = []
-        for index, desc in data.metadata.indices.items():
+        for index, desc in data.items():
             if not desc["aliases"]:
                 output.append({"index": index, "alias": None})
             else:
@@ -765,7 +766,7 @@ class Cluster(object):
                     failures="---\n".join(r.replace(";", ";\n") for r in details._shards.failures.reason)
                 )
             return details
-        except Exception, e:
+        except Exception as e:
             if url[0:4] != "http":
                 suggestion = " (did you forget \"http://\" prefix on the host name?)"
             else:
@@ -793,7 +794,7 @@ class Cluster(object):
             if details.error:
                 Log.error(details.error)
             return details
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with call to {{url}}", url=url, cause=e)
 
     def get(self, path, **kwargs):
@@ -810,7 +811,7 @@ class Cluster(object):
             if details.error:
                 Log.error(details.error)
             return details
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with call to {{url}}", url=url, cause=e)
 
     def head(self, path, **kwargs):
@@ -828,7 +829,7 @@ class Cluster(object):
                 return details
             else:
                 return None  # WE DO NOT EXPECT content WITH HEAD REQUEST
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with call to {{url}}",  url= url, cause=e)
 
     def put(self, path, **kwargs):
@@ -844,7 +845,7 @@ class Cluster(object):
             if self.debug:
                 Log.note("response: {{response}}",  response= utf82unicode(response.all_content)[0:300:])
             return response
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with call to {{url}}",  url= url, cause=e)
 
 
@@ -906,7 +907,7 @@ def _scrub(r):
                 return output
         else:
             return r
-    except Exception, e:
+    except Exception as e:
         Log.warning("Can not scrub: {{json}}", json=r, cause=e)
 
 
@@ -934,18 +935,20 @@ class Alias(Features):
             if not explore_metadata:
                 Log.error("Alias() was given no `type` (aka schema) and not allowed to explore metadata.  Do not know what to do now.")
 
-            indices = self.cluster.get_metadata().indices
             if not self.settings.alias or self.settings.alias==self.settings.index:
-                alias_list = self.cluster.get("/_alias/"+self.settings.index)
-                candidates = [(name, i) for name, i in alias_list.items() if self.settings.index in i.aliases.keys()]
+                alias_list = self.cluster.get("/_alias")
+                candidates = (
+                    [(name, i) for name, i in alias_list.items() if self.settings.index in i.aliases.keys()] +
+                    [(name, Null) for name, i in alias_list.items() if self.settings.index==name]
+                )
                 full_name = jx.sort(candidates, 0).last()[0]
-                index = self.cluster.get("/" + full_name + "/_mapping")[full_name]
+                mappings = self.cluster.get("/" + full_name + "/_mapping")[full_name]
             else:
-                index = self.cluster.get("/"+self.settings.index+"/_mapping")[self.settings.index]
+                mappings = self.cluster.get("/"+self.settings.index+"/_mapping")[self.settings.index]
 
             # FIND MAPPING WITH MOST PROPERTIES (AND ASSUME THAT IS THE CANONICAL TYPE)
             max_prop = -1
-            for _type, mapping in index.mappings.items():
+            for _type, mapping in mappings.mappings.items():
                 if _type == "_default_":
                     continue
                 num_prop = len(mapping.properties.keys())
@@ -1064,7 +1067,7 @@ class Alias(Features):
                 data=query,
                 timeout=coalesce(timeout, self.settings.timeout)
             )
-        except Exception, e:
+        except Exception as e:
             Log.error(
                 "Problem with search (path={{path}}):\n{{query|indent}}",
                 path=self.path + "/_search",
@@ -1082,7 +1085,7 @@ def parse_properties(parent_index_name, parent_name, esProperties):
     columns = FlatList()
     for name, property in esProperties.items():
         index_name = parent_index_name
-        column_name = join_field(split_field(parent_name) + [name])
+        column_name = concat_field(parent_name, name)
 
         if property.type == "nested" and property.properties:
             # NESTED TYPE IS A NEW TYPE DEFINITION
@@ -1093,8 +1096,8 @@ def parse_properties(parent_index_name, parent_name, esProperties):
             columns.extend(self_columns)
             columns.append(Column(
                 es_index=index_name,
-                names={index_name: column_name},
                 es_column=column_name,
+                names={".": column_name},
                 type="nested",
                 nested_path=ROOT_PATH
             ))
@@ -1105,7 +1108,7 @@ def parse_properties(parent_index_name, parent_name, esProperties):
             child_columns = parse_properties(index_name, column_name, property.properties)
             columns.extend(child_columns)
             columns.append(Column(
-                names={index_name: column_name},
+                names={".": column_name},
                 es_index=index_name,
                 es_column=column_name,
                 nested_path=ROOT_PATH,
@@ -1124,8 +1127,8 @@ def parse_properties(parent_index_name, parent_name, esProperties):
                     columns.append(Column(
                         table=index_name,
                         es_index=index_name,
-                        name=column_name,
                         es_column=column_name,
+                        name=column_name,
                         nested_path=ROOT_PATH,
                         type=p.type
                     ))
@@ -1133,8 +1136,8 @@ def parse_properties(parent_index_name, parent_name, esProperties):
                     columns.append(Column(
                         table=index_name,
                         es_index=index_name,
-                        name=column_name + "\\." + n,
                         es_column=column_name + "\\." + n,
+                        name=column_name + "\\." + n,
                         nested_path=ROOT_PATH,
                         type=p.type
                     ))
@@ -1143,24 +1146,23 @@ def parse_properties(parent_index_name, parent_name, esProperties):
         if property.type in ["string", "boolean", "integer", "date", "long", "double"]:
             columns.append(Column(
                 es_index=index_name,
-                names={index_name: column_name},
+                names={".": column_name},
                 es_column=column_name,
                 nested_path=ROOT_PATH,
                 type=property.type
             ))
             if property.index_name and name != property.index_name:
                 columns.append(Column(
-                    table=index_name,
                     es_index=index_name,
                     es_column=column_name,
-                    name=column_name,
+                    names={".":column_name},
                     nested_path=ROOT_PATH,
                     type=property.type
                 ))
         elif property.enabled == None or property.enabled == False:
             columns.append(Column(
                 es_index=index_name,
-                names={index_name: column_name},
+                names={".": column_name},
                 es_column=column_name,
                 nested_path=ROOT_PATH,
                 type="source" if property.enabled==False else "object"

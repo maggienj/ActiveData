@@ -63,7 +63,7 @@ class NullType(object):
             key = d["__key__"]
 
             _assign_to_null(o, [key], other)
-        except Exception, e:
+        except Exception as e:
             raise e
         return other
 
@@ -134,8 +134,11 @@ class NullType(object):
     def __iter__(self):
         return _zero_list.__iter__()
 
+    def __copy__(self):
+        return Null
+
     def __deepcopy__(self, memo):
-        return None
+        return Null
 
     def last(self):
         """
@@ -176,7 +179,7 @@ class NullType(object):
         v = o.get(k)
         if v == None:
             return NullType(self, key)
-        return wrap(v).get(key)
+        return wrap(v.get(key))
 
     def __setattr__(self, key, value):
         key = key.decode('utf8')
@@ -197,8 +200,14 @@ class NullType(object):
             return
         k = d["__key__"]
 
-        seq = [k] + split_field(key)
-        _assign_to_null(o, seq, value)
+        if o is None:
+            return
+        elif isinstance(key, int):
+            seq = [k] + [key]
+            _assign_to_null(o, seq, value)
+        else:
+            seq = [k] + split_field(key)
+            _assign_to_null(o, seq, value)
 
     def keys(self):
         return set()
@@ -254,5 +263,5 @@ def _assign_to_null(obj, path, value, force=True):
                 obj[path0] = old_value = {}
 
         _assign_to_null(old_value, path[1:], value)
-    except Exception, e:
+    except Exception as e:
         raise e

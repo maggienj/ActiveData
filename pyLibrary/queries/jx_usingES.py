@@ -25,7 +25,7 @@ from mo_kwargs import override
 from pyLibrary.queries import jx, containers, Schema
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.dimensions import Dimension
-from pyLibrary.queries.domains import is_keyword
+from jx_base.queries import is_variable_name
 from pyLibrary.queries.es09 import aggop as es09_aggop
 from pyLibrary.queries.es09 import setop as es09_setop
 from pyLibrary.queries.es14.aggs import es_aggsop, is_aggsop
@@ -81,12 +81,12 @@ class FromES(Container):
         self.edges = Data()
         self.worker = None
 
-        columns = self.get_columns(table_name=name)
-        self._schema = Schema(columns)
+        columns = self.meta.get_columns(table_name=coalesce(name, alias, index))
+        self._schema = Schema(coalesce(name, alias, index), columns)
 
         if typed == None:
             # SWITCH ON TYPED MODE
-            self.typed = any(c.name in ("$value", "$object") for c in columns)
+            self.typed = any(c.names["."] in ("$value", "$object") for c in columns)
         else:
             self.typed = typed
 
@@ -162,26 +162,12 @@ class FromES(Container):
             if es09_aggop.is_aggop(query):
                 return es09_aggop.es_aggop(self._es, None, query)
             Log.error("Can not handle")
-        except Exception, e:
+        except Exception as e:
             e = Except.wrap(e)
             if "Data too large, data for" in e:
                 http.post(self._es.cluster.path+"/_cache/clear")
                 Log.error("Problem (Tried to clear Elasticsearch cache)", e)
             Log.error("problem", e)
-
-    def get_columns(self, table_name=None, column_name=None):
-        # CONFIRM WE CAN USE NAME OF index
-        if table_name is None or table_name == self.settings.index or table_name == self.settings.alias:
-            table_name = self.settings.index
-        elif table_name.startswith(self.settings.index + ".") or table_name.startswith(self.settings.alias):
-            pass
-        else:
-            Log.error("expecting `table` to be same as, or deeper, than index name")
-
-        try:
-            return self.meta.get_columns(table_name=table_name, column_name=column_name)
-        except Exception:
-            return FlatList.EMPTY
 
     def addDimension(self, dim):
         if isinstance(dim, list):
@@ -231,7 +217,7 @@ class FromES(Container):
         # SCRIPT IS SAME FOR ALL (CAN ONLY HANDLE ASSIGNMENT TO CONSTANT)
         scripts = FlatList()
         for k, v in command.set.items():
-            if not is_keyword(k):
+            if not is_variable_name(k):
                 Log.error("Only support simple paths for now")
             if isinstance(v, Mapping) and v.doc:
                 scripts.append({"doc": v.doc})
@@ -255,3 +241,5 @@ class FromES(Container):
             if response.errors:
                 Log.error("could not update: {{error}}", error=[e.error for i in response["items"] for e in i.values() if e.status not in (200, 201)])
 
+from pyLibrary.queries.containers import type2container
+type2container["elasticsearch"]=FromES

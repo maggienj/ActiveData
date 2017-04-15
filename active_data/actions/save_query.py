@@ -71,7 +71,7 @@ class SaveQueries(object):
         es = Cluster(kwargs).get_or_create_index(
             schema=convert.json2value(convert.value2json(SCHEMA), leaves=True),
             limit_replicas=True,
-            settings=kwargs
+            kwargs=kwargs
         )
         #ENSURE THE TYPE EXISTS FOR PROBING
         try:
@@ -85,7 +85,7 @@ class SaveQueries(object):
             Log.warning("Problem saving query", cause=e)
         es.add_alias(es.settings.alias)
         es.flush()
-        self.queue = es.threaded_queue(max_size=max_size, batch_size=batch_size, period=SECOND)
+        self.queue = es.threaded_queue(max_size=max_size, batch_size=batch_size, period=1)
         self.es = FromES(es.settings)
 
     def find(self, hash):

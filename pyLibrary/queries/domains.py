@@ -39,7 +39,7 @@ class Domain(object):
         if cls == Domain:
             try:
                 return name_to_type[desc.get("type")](**desc)
-            except Exception, e:
+            except Exception as e:
                 Log.error("Do not know domain of type {{type}}", type=desc.get("type"), cause=e)
         else:
             return object.__new__(cls)
@@ -285,7 +285,7 @@ class SimpleSetDomain(Domain):
             if output is None:
                 return len(self.partitions)
             return output
-        except Exception, e:
+        except Exception as e:
             Log.error("problem", e)
 
 
@@ -295,7 +295,7 @@ class SimpleSetDomain(Domain):
             if not canonical:
                 return self.NULL
             return canonical
-        except Exception, e:
+        except Exception as e:
             Log.error("problem", e)
 
     def getPartByIndex(self, index):
@@ -392,7 +392,7 @@ class SetDomain(Domain):
             if output is None:
                 return len(self.partitions)
             return output
-        except Exception, e:
+        except Exception as e:
             Log.error("problem", e)
 
 
@@ -402,7 +402,7 @@ class SetDomain(Domain):
             if not canonical:
                 return self.NULL
             return canonical
-        except Exception, e:
+        except Exception as e:
             Log.error("problem", e)
 
     def getKey(self, part):
@@ -707,24 +707,6 @@ def value_compare(a, b):
         return -1
     else:
         return 0
-
-
-keyword_pattern = re.compile(r"(\$|\w|\\\.)+(?:\.(\$|\w|\\\.)+)*")
-
-
-def is_keyword(value):
-    if value.__class__.__name__ == "Variable":
-        Log.warning("not expected")
-        return True
-
-    if not value or not isinstance(value, basestring):
-        return False  # _a._b
-    if value == ".":
-        return True
-    match = keyword_pattern.match(value)
-    if not match:
-        return False
-    return match.group(0) == value
 
 
 name_to_type = {

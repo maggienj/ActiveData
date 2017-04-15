@@ -32,7 +32,7 @@ LOG_STRING_LENGTH = 2000
 
 class StructuredLogger_usingElasticSearch(StructuredLogger):
     @override
-    def __init__(self, host, index, type="log", max_size=1000, batch_size=100, kwargs=None):
+    def __init__(self, host, index, port=9200, type="log", max_size=1000, batch_size=100, kwargs=None):
         """
         settings ARE FOR THE ELASTICSEARCH INDEX
         """
@@ -78,7 +78,7 @@ class StructuredLogger_usingElasticSearch(StructuredLogger):
                     finally:
                         self.es.extend(scrubbed)
                     bad_count = 0
-            except Exception, e:
+            except Exception as e:
                 Log.warning("Problem inserting logs into ES", cause=e)
                 bad_count += 1
                 if bad_count > MAX_BAD_COUNT:
@@ -90,7 +90,7 @@ class StructuredLogger_usingElasticSearch(StructuredLogger):
             try:
                 Till(seconds=1).wait()
                 self.queue.pop_all()
-            except Exception, e:
+            except Exception as e:
                 Log.warning("Should not happen", cause=e)
 
     def stop(self):

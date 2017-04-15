@@ -13,7 +13,12 @@ from __future__ import unicode_literals
 
 from __builtin__ import zip as _builtin_zip
 from collections import Mapping
+from decimal import Decimal
 from types import GeneratorType, NoneType, ModuleType
+
+from datetime import datetime
+
+from datetime import date
 
 from mo_dots import utils
 from mo_dots.utils import get_logger, get_module
@@ -23,6 +28,7 @@ ROOT_PATH = [SELF_PATH]
 
 
 _get = object.__getattribute__
+_set = object.__setattr__
 
 
 def inverse(d):
@@ -64,7 +70,7 @@ def literal_field(field):
     """
     try:
         return field.replace(".", "\.")
-    except Exception, e:
+    except Exception as e:
         get_logger().error("bad literal", e)
 
 
@@ -90,7 +96,7 @@ def split_field(field):
     if field == "." or field==None:
         return []
     elif isinstance(field, unicode) and field.find(".") >= 0:
-        field = field.replace("\.", "\a")
+        field = field.replace("\\\\.", "\a").replace("\\.", "\a")
         return [k.replace("\a", ".") for k in field.split(".")]
     else:
         return [field]
@@ -213,7 +219,7 @@ def _all_default(d, default, seen=None):
                     # ASSUME PRIMITIVE (OR LIST, WHICH WE DO NOT COPY)
                     try:
                         _set_attr(d, [k], default_value)
-                    except Exception, e:
+                    except Exception as e:
                         if PATH_NOT_FOUND not in e:
                             get_logger().error("Can not set attribute {{name}}", name=k, cause=e)
         elif isinstance(existing_value, list) or isinstance(default_value, list):
@@ -270,12 +276,12 @@ def set_attr(obj, path, value):
     """
     try:
         return _set_attr(obj, split_field(path), value)
-    except Exception, e:
+    except Exception as e:
         Log = get_logger()
         if PATH_NOT_FOUND in e:
-            Log.warning(PATH_NOT_FOUND + ": {{path}}",  path= path)
+            Log.warning(PATH_NOT_FOUND + ": {{path}}", path=path, cause=e)
         else:
-            Log.error("Problem setting value", e)
+            Log.error("Problem setting value", cause=e)
 
 
 def get_attr(obj, path):
@@ -284,7 +290,7 @@ def get_attr(obj, path):
     """
     try:
         return _get_attr(obj, split_field(path))
-    except Exception, e:
+    except Exception as e:
         Log = get_logger()
         if PATH_NOT_FOUND in e:
             Log.error(PATH_NOT_FOUND+": {{path}}",  path=path, cause=e)
@@ -307,19 +313,21 @@ def _get_attr(obj, path):
         # TRY FILESYSTEM
         File = get_module("mo_files").File
         possible_error = None
-        if File.new_instance(File(obj.__file__).parent, attr_name).set_extension("py").exists:
+        python_file = File.new_instance(File(obj.__file__).parent, attr_name).set_extension("py")
+        python_module = File.new_instance(File(obj.__file__).parent, attr_name, "__init__.py")
+        if python_file.exists or python_module.exists:
             try:
                 # THIS CASE IS WHEN THE __init__.py DOES NOT IMPORT THE SUBDIR FILE
                 # WE CAN STILL PUT THE PATH TO THE FILE IN THE from CLAUSE
                 if len(path)==1:
                     # GET MODULE OBJECT
-                    output = __import__(obj.__name__ + "." + attr_name, globals(), locals(), [path[0]], 0)
+                    output = __import__(obj.__name__ + b"." + attr_name.decode('utf8'), globals(), locals(), [attr_name.decode('utf8')], 0)
                     return output
                 else:
                     # GET VARIABLE IN MODULE
-                    output = __import__(obj.__name__ + "." + attr_name, globals(), locals(), [path[1]], 0)
+                    output = __import__(obj.__name__ + b"." + attr_name.decode('utf8'), globals(), locals(), [path[1].decode('utf8')], 0)
                     return _get_attr(output, path[1:])
-            except Exception, e:
+            except Exception as e:
                 Except = get_module("mo_logs.exceptions.Except")
                 possible_error = Except.wrap(e)
 
@@ -351,10 +359,12 @@ def _get_attr(obj, path):
         return None
 
 
-def _set_attr(obj, path, value):
-    obj = _get_attr(obj, path[:-1])
-    if obj is None:  # DELIBERATE, WE DO NOT WHAT TO CATCH Null HERE (THEY CAN BE SET)
-        get_logger().error(PATH_NOT_FOUND)
+def _set_attr(obj_, path, value):
+    obj = _get_attr(obj_, path[:-1])
+    if obj is None:  # DELIBERATE USE OF `is`: WE DO NOT WHAT TO CATCH Null HERE (THEY CAN BE SET)
+        obj = _get_attr(obj_, path[:-1])
+        if obj is None:
+            get_logger().error(PATH_NOT_FOUND+" Tried to get attribute of None")
 
     attr_name = path[-1]
 
@@ -366,19 +376,19 @@ def _set_attr(obj, path, value):
             new_value = value
         else:
             new_value = old_value.__class__(value)  # TRY TO MAKE INSTANCE OF SAME CLASS
-    except Exception, e:
+    except Exception as e:
         old_value = None
         new_value = value
 
     try:
         setattr(obj, attr_name, new_value)
         return old_value
-    except Exception, e:
+    except Exception as e:
         try:
             obj[attr_name] = new_value
             return old_value
         except Exception, f:
-            get_logger().error(PATH_NOT_FOUND)
+            get_logger().error(PATH_NOT_FOUND, cause=e)
 
 
 def lower_match(value, candidates):
@@ -389,12 +399,9 @@ def wrap(v):
     type_ = _get(v, "__class__")
 
     if type_ is dict:
-        m = Data(v)
+        m = object.__new__(Data)
+        _set(m, "_dict", v)
         return m
-        # m = object.__new__(Data)
-        # object.__setattr__(m, "_dict", v)
-        # return m
-
     elif type_ is NoneType:
         return Null
     elif type_ is list:
@@ -469,7 +476,10 @@ def unwrap(v):
         return None
     elif _type is DataObject:
         d = _get(v, "_obj")
-        return d
+        if isinstance(d, Mapping):
+            return d
+        else:
+            return v
     elif _type is GeneratorType:
         return (unwrap(vv) for vv in v)
     else:

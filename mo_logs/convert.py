@@ -24,7 +24,7 @@ def unix2datetime(u):
         if u == 9999999999: # PYPY BUG https://bugs.pypy.org/issue1697
             return datetime(2286, 11, 20, 17, 46, 39)
         return datetime.utcfromtimestamp(u)
-    except Exception, e:
+    except Exception as e:
         from mo_logs import Log
         Log.error("Can not convert {{value}} to datetime",  value= u, cause=e)
 
@@ -38,7 +38,7 @@ def milli2datetime(u):
 def datetime2string(value, format="%Y-%m-%d %H:%M:%S"):
     try:
         return value.strftime(format)
-    except Exception, e:
+    except Exception as e:
         from mo_logs import Log
         Log.error("Can not format {{value}} with {{format}}", value=value, format=format, cause=e)
 
@@ -57,7 +57,7 @@ def datetime2unix(d):
 
         diff = d - epoch
         return float(diff.total_seconds())
-    except Exception, e:
+    except Exception as e:
         from mo_logs import Log
         Log.error("Can not convert {{value}}", value=d, cause=e)
 
@@ -72,7 +72,7 @@ def latin12unicode(value):
         Log.error("can not convert unicode from latin1")
     try:
         return unicode(value.decode('iso-8859-1'))
-    except Exception, e:
+    except Exception as e:
         from mo_logs import Log
         Log.error("Can not convert {{value|quote}} to unicode", value=value, cause=e)
 
@@ -80,24 +80,6 @@ def latin12unicode(value):
 _map2url = {chr(i): latin12unicode(chr(i)) for i in range(32, 256)}
 for c in " {}<>;/?:@&=+$,":
     _map2url[c] = "%" + int2hex(ord(c), 2)
-
-
-def value2url(value):
-    if value == None:
-        from mo_logs import Log
-        Log.error("")
-
-    if isinstance(value, Mapping):
-        output = "&".join([value2url(k) + "=" + (value2url(v) if isinstance(v, basestring) else value2url(value2json(v))) for k,v in value.items()])
-    elif isinstance(value, unicode):
-        output = "".join([_map2url[c] for c in unicode2latin1(value)])
-    elif isinstance(value, str):
-        output = "".join([_map2url[c] for c in value])
-    elif hasattr(value, "__iter__"):
-        output = ",".join(value2url(v) for v in value)
-    else:
-        output = unicode(value)
-    return output
 
 
 def value2json(value):

@@ -17,7 +17,7 @@ from mo_testing.fuzzytestcase import FuzzyTestCase
 from pyLibrary.queries.expressions import NullOp
 
 TEST_TABLE = "testdata"
-NULL = NullOp
+NULL = NullOp()
 
 global_settings = None
 utils = None
@@ -30,7 +30,7 @@ class BaseTestCase(FuzzyTestCase):
         if not utils:
             try:
                 import tests
-            except Exception, e:
+            except Exception:
                 Log.error("Expecting ./tests/__init__.py to set `global_settings` and `utils` so tests can be run")
         self.utils = utils
 
