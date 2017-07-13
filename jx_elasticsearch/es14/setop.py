@@ -171,7 +171,7 @@ def extract_rows(es, es_query, query):
                                     })
                     i += 1
         else:
-            es_query.script_fields[literal_field(select.name)] = {"script": select.value.to_painless()}
+            es_query.script_fields[literal_field(select.name)] = {"script": {"inline": select.value.to_painless()}}
             new_select.append({
                 "name": select.name,
                 "pull": "fields." + literal_field(select.name),
