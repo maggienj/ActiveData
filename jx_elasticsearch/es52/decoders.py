@@ -265,6 +265,7 @@ def _range_composer(edge, domain, es_query, to_float):
 class TimeDecoder(AggsDecoder):
     def append_query(self, es_query, start):
         self.start = start
+        mapper = self.query.schema.leaves(".")
         return _range_composer(self.edge, self.edge.domain, es_query, lambda x: x.unix)
 
     def get_value(self, index):
@@ -555,7 +556,7 @@ class DefaultDecoder(SetDecoder):
                     {"terms": {
                         "script": {
                             "lang": "painless",
-                            "inline": self.edge.value.map(es_mapping).to_painless()
+                            "inline": self.edge.value.map(es_mapping).partial_eval().to_painless()
                         },
                         "size": self.domain.limit,
                         "order": {"_term": self.sorted} if self.sorted else None
