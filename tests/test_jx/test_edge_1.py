@@ -31,33 +31,34 @@ class TestEdge1(BaseTestCase):
                     {"a": "b", "count": 2},
                     {"a": "c", "count": 3},
                     {"a": NULL, "count": 1}
-                ]},
-            "expecting_table": {
-                "meta": {"format": "table"},
-                "header": ["a", "count"],
-                "data": [
-                    ["b", 2],
-                    ["c", 3],
-                    [NULL, 1]
                 ]
-            },
-            "expecting_cube": {
-                "meta": {"format": "cube"},
-                "edges": [
-                    {
-                        "name": "a",
-                        "allowNulls": True,
-                        "domain": {
-                            "type": "set",
-                            "key": "value",
-                            "partitions": [{"value": "b"}, {"value": "c"}]
-                        }
-                    }
-                ],
-                "data": {
-                    "count": [2, 3, 1]
-                }
             }
+            # "expecting_table": {
+            #     "meta": {"format": "table"},
+            #     "header": ["a", "count"],
+            #     "data": [
+            #         ["b", 2],
+            #         ["c", 3],
+            #         [NULL, 1]
+            #     ]
+            # },
+            # "expecting_cube": {
+            #     "meta": {"format": "cube"},
+            #     "edges": [
+            #         {
+            #             "name": "a",
+            #             "allowNulls": True,
+            #             "domain": {
+            #                 "type": "set",
+            #                 "key": "value",
+            #                 "partitions": [{"value": "b"}, {"value": "c"}]
+            #             }
+            #         }
+            #     ],
+            #     "data": {
+            #         "count": [2, 3, 1]
+            #     }
+            # }
         }
         self.utils.execute_tests(test)
 

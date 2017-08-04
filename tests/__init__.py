@@ -145,6 +145,7 @@ class ESUtils(object):
         return self.settings.fastTesting
 
     def execute_tests(self, subtest, tjson=True):
+        subtest_as_is = subtest
         subtest = wrap(subtest)
         subtest.name = extract_stack()[1]['method']
 
